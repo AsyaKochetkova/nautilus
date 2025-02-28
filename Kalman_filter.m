@@ -1,0 +1,97 @@
+% Kalman Filter
+%%
+%
+%
+%
+
+clc;
+clear;
+
+I=1:20000;
+
+m = csvread('r-gelio.csv');
+v = csvread('V-gelio.csv');
+t = csvread('t-gelio.csv');
+
+M = zeros(200,3);
+V = zeros(200,3);
+T = zeros(200,1);
+
+for i=1:1:20000
+ n=(i-1)/1+1;
+ n= round(n);
+ M(n,:) = m(i,:);
+ V(n,:) = v(i,:);
+ T(n) = t(i);
+end
+
+E = eye(6);
+%R = [1 0 0 0 0 0;
+%     0 1 0 0 0 0;
+%     0 0 1 0 0 0;
+%     0 0 0 1e-10 0 0;
+%     0 0 0 0 1e-10 0;
+%     0 0 0 0 0 1e-10];
+
+R = [1 0 0 0 0 0;
+     0 1 0 0 0 0;
+     0 0 1 0 0 0;
+     0 0 0 1 0 0;
+     0 0 0 0 1 0;
+     0 0 0 0 0 1];
+
+
+%R_1 = M(1,:) * (1 + (1e8+64e5)/norm(M(1,:))) + [0 64e5 0] ;
+%R_2 = M(1,:) * (1 + (1e8+64e5)/norm(M(1,:))) + [0 -64e5 0] ;
+
+State_X=[M,V];
+
+% State_X = [T(2:size(T,1)),M(2:size(M,1),:)];
+% for i=1:1:size(M,1)-1
+%    State_X(i,5:7) = (M(i+1,:) - M(i,:))/(T(i+1)-T(i));  
+% end
+s = size(M,1);
+x = zeros(s,6);
+x_p = zeros(s,6);
+x(1,:)=ones(1,6)*1e-3;
+K = zeros(6,6,s);
+K(:,:,1) = eye(6);
+
+for i=2:50
+    
+    dt = T(i)-T(i-1);
+    x_k_1 = x(i-1,:);
+    K_k_1=K(:,:,i-1);
+    
+    rE = zeros(1,3);
+    VE = zeros(1,3);
+    [rE,VE] = planetEphemeris(T(i)/24/3600,'Sun','Earth');
+    
+    %[0 -64e5 0] ;
+
+    
+    F = calc_F(x_k_1,dt);
+    x_p(i,:) = predict_x(F,x_k_1);
+    K_p = predict_K(F,K_k_1);
+
+    H = calc_H(x_k_1,rE,VE);
+    a = calc_a(K_p,H,R);
+    %y = calc_y(H);
+    
+    x(i,:) = refine_x(x_p(i,:),a,H,R)'; 
+    K(:,:,i) = refine_K(a,H,K_p); 
+    save('Kalman_filter_3.mat');
+    
+    
+    %plot(x(1:i,1),I(1:i));
+    %drawnow
+    
+end
+
+
+
+figure
+plot(T/24/3600/7,vecnorm(x(:,1:3),2,2))
+
+figure
+plot(T/24/3600/7,vecnorm(x(:,4:6),2,2))
